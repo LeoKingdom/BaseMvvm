@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MonitorApplication"
 include ':app'
+include ':myBaseLibrary'

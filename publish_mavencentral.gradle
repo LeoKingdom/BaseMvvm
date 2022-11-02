@@ -1,0 +1,127 @@
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+task androidSourcesJar(type: Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.source
+
+    exclude "**/R.class"  //排除`R.class`
+    exclude "**/BuildConfig.class"  //排除`BuildConfig.class`
+}
+
+//--- 修改配置一 ---
+//PUBLISH_GROUP_ID:注册sonatype时填写的的的groupId域名，如果是github的则是io.github.xxx
+//PUBLISH_ARTIFACT_ID:库的名称
+//PUBLISH_VERSION:库的版本
+////以上三个参数分别对应的是 implementation 'io.github.Junkmer:JRouter:0.0.1' 冒号从左往右分割的三部分
+ext {path=
+        PUBLISH_GROUP_ID = 'io.github.LeoKingdom'
+    PUBLISH_ARTIFACT_ID = 'BaseMvvm'
+    PUBLISH_VERSION = '1.0'
+}
+
+//--- 修改配置二 ---
+ext["signing.keyId"] = '93FA2C2C'  //公钥的秘钥后8位
+ext["signing.password"] = 'lc123456.'       //创建GPG秘钥时设置的密码
+ext["signing.secretKeyRingFile"] = 'D:/Gpg4win/gen-keys/gen_key.gpg'        //生成的.gpg结尾的密钥文件目录
+ext["ossrhUsername"] = 'Yunc'   //sonatype用户名
+ext["ossrhPassword"] = 'Kindom123456789&'  //sonatype密码
+
+File secretPropsFile = project.rootProject.file('local.properties')
+if (secretPropsFile.exists()) {
+    println "Found secret props file, loading props"
+    Properties p = new Properties()
+    p.load(new FileInputStream(secretPropsFile))
+    p.each { name, value ->
+        ext[name] = value
+    }
+} else {
+    println "No props file, loading env vars"
+}
+publishing {
+    publications {
+        release(MavenPublication) {
+            println("publish-maven Log-------> PUBLISH_GROUP_ID: $PUBLISH_GROUP_ID; PUBLISH_ARTIFACT_ID: $PUBLISH_ARTIFACT_ID; PUBLISH_VERSION: $PUBLISH_VERSION")
+            // The coordinates of the library, being set from variables that
+            // we'll set up in a moment
+
+            //配置一传入的参数
+            groupId PUBLISH_GROUP_ID
+            artifactId PUBLISH_ARTIFACT_ID
+            version PUBLISH_VERSION
+
+            // Two artifacts, the `aar` and the sources
+            artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
+            artifact androidSourcesJar
+
+            // Self-explanatory metadata for the most part
+            pom {
+                //--- 修改配置三 ---
+                name = PUBLISH_ARTIFACT_ID
+                description = '一个mvvm基础架构库,目前仅支持个人使用' //添加文件描述
+                //项目github链接
+                url = 'https://github.com/LeoKingdom/BaseMvvm'
+                licenses {
+                    license {
+                        //协议类型，一般默认Apache License2.0的话不用改：
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        //--- 修改配置四 ---
+                        id = 'Lingc'     //你的sonatype用户ID
+                        name = 'Yunc'   //你的sonatype用户名
+                        email = '1550635367@qq.com'    //你的sonatype注册邮箱
+                    }
+                }
+                // Version control info, if you're using GitHub, follow the format as seen here
+                scm {
+                    //--- 修改配置五 ---
+                    //修改成你的Git地址：
+                    connection = 'https://github.com/LeoKingdom/BaseMvvm.git'
+                    developerConnection = 'https://github.com/LeoKingdom/BaseMvvm.git'
+                    //分支地址：
+                    url = 'https://github.com/LeoKingdom/BaseMvvm'
+                }
+                // A slightly hacky fix so that your POM will include any transitive dependencies
+                // that your library builds upon
+                withXml {
+                    def dependenciesNode = asNode().appendNode('dependencies')
+
+                    project.configurations.implementation.allDependencies.each {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', it.group)
+                        dependencyNode.appendNode('artifactId', it.name)
+                        dependencyNode.appendNode('version', it.version)
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        // The repository to publish to, Sonatype/MavenCentral
+        maven {
+            // This is an arbitrary name, you may also use "mavencentral" or
+            // any other name that's descriptive for you
+
+            //--- 修改配置六 ---
+            name = "BaseMvvm"
+            def releasesRepoUrl = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+            def snapshotsRepoUrl = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+            // You only need this if you want to publish snapshots, otherwise just set the URL
+            // to the release repo directly
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+
+            // The username and password we've fetched earlier
+            credentials {
+                username ossrhUsername
+                password ossrhPassword
+            }
+        }
+    }
+}
+signing {
+    sign publishing.publications
+}
